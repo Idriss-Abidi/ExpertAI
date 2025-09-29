@@ -1,0 +1,150 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: research_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: results
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d results"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - research_network
+
+  # Multi-DB MCP Server
+  multi-db-mcp:
+    build:
+      context: ./mcp_demo
+      dockerfile: Dockerfile.multi_db
+    container_name: multi_db_mcp
+    ports:
+      - "8017:8017"
+    volumes:
+      - ./mcp_demo/db_configs.yaml:/app/db_configs.yaml
+      - mcp_configs:/app/configs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket,sys; s=socket.socket(); s.settimeout(2);\ns.connect(('localhost',8017)); s.close(); sys.exit(0)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - CONFIG_FILE=/app/db_configs.yaml
+    networks:
+      - research_network
+
+  # ORCID MCP Server
+  orcid-mcp:
+    build:
+      context: ./mcp_demo
+      dockerfile: Dockerfile.orcid
+    container_name: orcid_mcp
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket,sys; s=socket.socket(); s.settimeout(2);\ns.connect(('localhost',8001)); s.close(); sys.exit(0)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - research_network
+
+  # Backend v2 API
+  backend-v2:
+    build:
+      context: ./backend_v2
+      dockerfile: Dockerfile
+    container_name: backend_v2
+    ports:
+      - "8020:8020"
+    env_file:
+      - ./backend_v2/docker.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      multi-db-mcp:
+        condition: service_healthy
+      orcid-mcp:
+        condition: service_healthy
+    volumes:
+      - chroma_data:/app/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - research_network
+
+  # Organized Data Management API
+  data-management-api:
+    build:
+      context: ./organized_data_management_api
+      dockerfile: Dockerfile
+    container_name: data_management_api
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./organized_data_management_api/docker.env
+    depends_on:
+      multi-db-mcp:
+        condition: service_healthy
+      orcid-mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    networks:
+      - research_network
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./research-assistant-app
+      dockerfile: Dockerfile
+    container_name: research_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend-v2:
+        condition: service_healthy
+      data-management-api:
+        condition: service_healthy
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8020/api/v1
+      - NEXT_PUBLIC_DATA_MANAGEMENT_API_URL=http://localhost:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - research_network
+
+volumes:
+  postgres_data:
+    driver: local
+  chroma_data:
+    driver: local
+  mcp_configs:
+    driver: local
+
+networks:
+  research_network:
+    driver: bridge
