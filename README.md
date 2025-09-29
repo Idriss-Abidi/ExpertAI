@@ -39,11 +39,6 @@ Before running the project, make sure you have the following installed:
 
 ### 1. Clone the Repository
 
-```bash
-git clone https://github.com/Idriss-Abidi/stage2a-expertsAgenticApp.git
-cd stage2a-expertsAgenticApp
-```
-
 ### 2. Install Ollama and Required Models
 
 ```bash
