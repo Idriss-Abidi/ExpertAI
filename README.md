@@ -81,6 +81,21 @@ Once all services are running, you can access:
 - **ORCID MCP Server**: http://localhost:8001
 - **PostgreSQL Database**: localhost:5433
 
+## Database Testing - PostgreSQL
+
+### Use Simulation Database
+
+To test with the provided simulation database:
+
+1. **Open pgAdmin or your Database management tool**
+2. **Create a new database** (name it whatever you want)
+3. **Run from inside psql**:
+   ```sql
+   \i 'your_path/simulation_db.sql'
+   ```
+
+Replace `'your_path/simulation_db.sql'` with the actual path to the simulation database file located in the `postgres_simulation_database/` directory.
+
 ## 📊 Service Status
 
 Check if all services are running properly:
